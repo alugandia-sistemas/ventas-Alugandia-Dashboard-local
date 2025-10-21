@@ -1,5 +1,5 @@
 
-# Alugandia · Dashboard de Ventas (2024–2025)
+# Alugandia · Dashboard de Ventas (2020–2025)
 
 ## Ejecución local
 
@@ -24,8 +24,8 @@ Ejecutar env en PowerhSell
 3. Se abrirá en tu navegador en `http://localhost:8501`.
 
 ## Segmentos de facturación
-- 🟢 > 20.000 €
-- 🟡 10.000–20.000 €
+- 🟢 > 15.000 €
+- 🟡 10.000–15.000 €
 - 🔴 < 10.000 €
 
 

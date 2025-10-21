@@ -1,5 +1,7 @@
 # Entorno virtual
-myenv
+env
+
+.secrets.toml
 
 # Datos
 data

@@ -7,7 +7,21 @@ import os
 st.set_page_config(page_title="Alugandia · Ventas multi-año", layout="wide")
 st.title("📊 Alugandia · Dashboard de Ventas")
 st.subheader("Análisis de ventas por cliente y año (2020-2025)")
-st.caption("Carga automática de CSVs por año con columnas: client_code, client_name, net_sales, client_code_norm.")
+# st.caption("Carga automática de CSVs por año con columnas: client_code, client_name, net_sales, client_code_norm.")
+
+
+# Login / Proteccion con contraseña
+import streamlit as st
+
+def login():
+    st.sidebar.subheader("🔐 Acceso privado")
+    password = st.sidebar.text_input("Contraseña:", type="password")
+    if password != st.secrets["APP_PASSWORD"]:
+        st.error("Contraseña incorrecta o falta.")
+        st.stop()
+
+login()
+
 
 # --- Configuración ---
 DATA_FOLDER = "data"  # Carpeta donde se guardan los CSVs
