@@ -50,3 +50,11 @@ Ejecutar env en PowerhSell
    - 🟡 10K–20K
 
    - 🔴 <10K
+
+   ## Deployment in Render
+
+[Secrets management in Render](https://discuss.streamlit.io/t/secrets-management-in-render/39736/3)
+
+```bash
+mkdir .streamlit; cp /etc/secrets/secrets.toml ./.streamlit/; pip install --upgrade pip && pip install -r requirements.txt
+```

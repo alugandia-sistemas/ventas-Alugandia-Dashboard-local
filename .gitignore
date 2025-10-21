@@ -1,8 +1,5 @@
 # Entorno virtual
 env
 
-.secrets.toml
-
 # Datos
-data
 data_bruto
