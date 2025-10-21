@@ -5,18 +5,19 @@ import re
 import os
 
 st.set_page_config(page_title="Alugandia · Ventas multi-año", layout="wide")
-st.title("📊 Alugandia · Dashboard de Ventas (multi-año por cliente)")
-st.caption("Carga automática de CSVs por año con columnas: client_code, client_name, net_sales, code_norm.")
+st.title("📊 Alugandia · Dashboard de Ventas")
+st.subheader("Análisis de ventas por cliente y año (2020-2025)")
+st.caption("Carga automática de CSVs por año con columnas: client_code, client_name, net_sales, client_code_norm.")
 
 # --- Configuración ---
 DATA_FOLDER = "data"  # Carpeta donde se guardan los CSVs
 
 # --- Funciones auxiliares ---
 def label_segment(amount: float) -> str:
-    if amount > 20000:
-        return "🟢 >20K"
+    if amount > 15000:
+        return "🟢 >15K"
     elif amount >= 10000:
-        return "🟡 10K–20K"
+        return "🟡 10K–15K"
     else:
         return "🔴 <10K"
 
@@ -34,7 +35,7 @@ def load_all_csvs(path: str):
                 continue
             year = int(year_match.group(1))
             df = pd.read_csv(os.path.join(path, fname))
-            if not {"client_code","client_name","net_sales","code_norm"}.issubset(df.columns):
+            if not {"client_code","client_name","net_sales","client_code_norm"}.issubset(df.columns):
                 st.warning(f"⚠️ El archivo {fname} no tiene todas las columnas requeridas.")
                 continue
             df["year"] = year
@@ -43,7 +44,8 @@ def load_all_csvs(path: str):
         st.warning("No se encontraron archivos CSV válidos (por ejemplo: ventas_2024.csv, ventas_2025.csv).")
         return pd.DataFrame()
     df_all = pd.concat(frames, ignore_index=True)
-    df_all = df_all[df_all["code_norm"] != 12334]  # excluir Soleco Traders
+    # Excluir Soleco Traders
+    df_all = df_all[df_all["client_code_norm"] != 12334]
     df_all["segment"] = df_all["net_sales"].apply(label_segment)
     return df_all
 
@@ -56,16 +58,27 @@ if df_all.empty:
 st.sidebar.header("🔎 Filtros")
 years = sorted(df_all["year"].unique())
 year = st.sidebar.selectbox("Año", years, index=len(years)-1)
-seg_sel = st.sidebar.selectbox("Segmento", ["Todos", "🟢 >20K", "🟡 10K–20K", "🔴 <10K"], index=0)
+seg_sel = st.sidebar.selectbox("Segmento", ["Todos", "🟢 >15K", "🟡 10K–15K", "🔴 <10K"], index=0)
 show_names = st.sidebar.checkbox("Mostrar nombres de clientes", value=False)
 
 df_year = df_all[df_all["year"] == year].copy()
 if seg_sel != "Todos":
     df_year = df_year[df_year["segment"] == seg_sel]
 
+# --- Filtro de exclusión ---
+st.sidebar.subheader("🚫 Excluir clientes")
+exclude_options = sorted(df_year["client_name"].unique())
+exclude_selected = st.sidebar.multiselect(
+    "Selecciona clientes a excluir del análisis:",
+    options=exclude_options,
+    default=[]
+)
+if exclude_selected:
+    df_year = df_year[~df_year["client_name"].isin(exclude_selected)]
+
 # --- Métricas ---
 total_sales = df_year["net_sales"].sum()
-n_clients = df_year["client_code"].nunique()
+n_clients = df_year["client_code_norm"].nunique()
 
 c1, c2 = st.columns(2)
 c1.metric("Ventas totales", f"{total_sales:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
@@ -75,19 +88,17 @@ c2.metric("Nº de clientes", f"{n_clients}")
 colA, colB = st.columns([1,2])
 
 with colA:
-    seg_summary = df_all[df_all["year"]==year].groupby("segment", as_index=False)["net_sales"].sum()
+    seg_summary = df_year.groupby("segment", as_index=False)["net_sales"].sum()
     fig_pie = px.pie(seg_summary, names="segment", values="net_sales", hole=0.55,
                      title=f"Distribución por segmento ({year})")
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with colB:
-    # Preparar datos top
     top_df = df_year.sort_values("net_sales", ascending=False).head(20)
-    # Cambiar etiquetas según preferencia
     if show_names:
-        top_df["label"] = top_df["client_name"] + " (" + top_df["code_norm"].astype(str) + ")"
+        top_df["label"] = top_df["client_name"] + " (" + top_df["client_code_norm"].astype(str) + ")"
     else:
-        top_df["label"] = top_df["code_norm"].astype(str)
+        top_df["label"] = top_df["client_code_norm"].astype(str)
     fig_bar = px.bar(top_df, x="net_sales", y="label", orientation="h",
                      title=f"Top 20 clientes · {year}", text="net_sales")
     fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Facturación (€)", yaxis_title="Cliente")
@@ -101,10 +112,10 @@ st.plotly_chart(fig_year, use_container_width=True)
 
 # --- Tabla ---
 st.subheader(f"📋 Clientes {year}")
-cols = ["client_code", "code_norm", "net_sales", "segment"]
+cols = ["client_code", "client_code_norm", "net_sales", "segment"]
 rename_map = {
     "client_code": "Código original",
-    "code_norm": "Código normalizado",
+    "client_code_norm": "Código normalizado",
     "net_sales": "Facturación (€)",
     "segment": "Segmento"
 }
