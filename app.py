@@ -1,0 +1,116 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import re
+import os
+
+st.set_page_config(page_title="Alugandia · Ventas multi-año", layout="wide")
+st.title("📊 Alugandia · Dashboard de Ventas (multi-año por cliente)")
+st.caption("Carga automática de CSVs por año con columnas: client_code, client_name, net_sales, code_norm.")
+
+# --- Configuración ---
+DATA_FOLDER = "data"  # Carpeta donde se guardan los CSVs
+
+# --- Funciones auxiliares ---
+def label_segment(amount: float) -> str:
+    if amount > 20000:
+        return "🟢 >20K"
+    elif amount >= 10000:
+        return "🟡 10K–20K"
+    else:
+        return "🔴 <10K"
+
+# --- Cargar todos los CSVs ---
+@st.cache_data
+def load_all_csvs(path: str):
+    frames = []
+    if not os.path.exists(path):
+        st.warning(f"No se encontró la carpeta '{path}'. Crea una carpeta con tus CSVs dentro del proyecto.")
+        return pd.DataFrame()
+    for fname in os.listdir(path):
+        if fname.lower().endswith(".csv"):
+            year_match = re.search(r"(\d{4})", fname)
+            if not year_match:
+                continue
+            year = int(year_match.group(1))
+            df = pd.read_csv(os.path.join(path, fname))
+            if not {"client_code","client_name","net_sales","code_norm"}.issubset(df.columns):
+                st.warning(f"⚠️ El archivo {fname} no tiene todas las columnas requeridas.")
+                continue
+            df["year"] = year
+            frames.append(df)
+    if not frames:
+        st.warning("No se encontraron archivos CSV válidos (por ejemplo: ventas_2024.csv, ventas_2025.csv).")
+        return pd.DataFrame()
+    df_all = pd.concat(frames, ignore_index=True)
+    df_all = df_all[df_all["code_norm"] != 12334]  # excluir Soleco Traders
+    df_all["segment"] = df_all["net_sales"].apply(label_segment)
+    return df_all
+
+# --- Cargar datos ---
+df_all = load_all_csvs(DATA_FOLDER)
+if df_all.empty:
+    st.stop()
+
+# --- Filtros ---
+st.sidebar.header("🔎 Filtros")
+years = sorted(df_all["year"].unique())
+year = st.sidebar.selectbox("Año", years, index=len(years)-1)
+seg_sel = st.sidebar.selectbox("Segmento", ["Todos", "🟢 >20K", "🟡 10K–20K", "🔴 <10K"], index=0)
+show_names = st.sidebar.checkbox("Mostrar nombres de clientes", value=False)
+
+df_year = df_all[df_all["year"] == year].copy()
+if seg_sel != "Todos":
+    df_year = df_year[df_year["segment"] == seg_sel]
+
+# --- Métricas ---
+total_sales = df_year["net_sales"].sum()
+n_clients = df_year["client_code"].nunique()
+
+c1, c2 = st.columns(2)
+c1.metric("Ventas totales", f"{total_sales:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+c2.metric("Nº de clientes", f"{n_clients}")
+
+# --- Gráficos ---
+colA, colB = st.columns([1,2])
+
+with colA:
+    seg_summary = df_all[df_all["year"]==year].groupby("segment", as_index=False)["net_sales"].sum()
+    fig_pie = px.pie(seg_summary, names="segment", values="net_sales", hole=0.55,
+                     title=f"Distribución por segmento ({year})")
+    st.plotly_chart(fig_pie, use_container_width=True)
+
+with colB:
+    # Preparar datos top
+    top_df = df_year.sort_values("net_sales", ascending=False).head(20)
+    # Cambiar etiquetas según preferencia
+    if show_names:
+        top_df["label"] = top_df["client_name"] + " (" + top_df["code_norm"].astype(str) + ")"
+    else:
+        top_df["label"] = top_df["code_norm"].astype(str)
+    fig_bar = px.bar(top_df, x="net_sales", y="label", orientation="h",
+                     title=f"Top 20 clientes · {year}", text="net_sales")
+    fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Facturación (€)", yaxis_title="Cliente")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+# --- Evolución anual ---
+st.subheader("📈 Evolución anual de ventas totales")
+year_summary = df_all.groupby("year", as_index=False)["net_sales"].sum()
+fig_year = px.line(year_summary, x="year", y="net_sales", markers=True, title="Evolución anual de ventas")
+st.plotly_chart(fig_year, use_container_width=True)
+
+# --- Tabla ---
+st.subheader(f"📋 Clientes {year}")
+cols = ["client_code", "code_norm", "net_sales", "segment"]
+rename_map = {
+    "client_code": "Código original",
+    "code_norm": "Código normalizado",
+    "net_sales": "Facturación (€)",
+    "segment": "Segmento"
+}
+if show_names:
+    cols.insert(1, "client_name")
+    rename_map["client_name"] = "Cliente"
+
+df_table = df_year[cols].rename(columns=rename_map)
+st.dataframe(df_table, use_container_width=True)
